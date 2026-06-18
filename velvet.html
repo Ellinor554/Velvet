@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Velvet — Music Discovery</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.3.0/dist/tabler-icons.min.css" />
+  <style>
+    :root {
+      --esp-bg: #1C1410;
+      --esp-surface: #261B14;
+      --esp-card: #2E2018;
+      --esp-border: #3D2B1F;
+      --esp-cream: #F2EBD9;
+      --esp-muted: #A89070;
+      --esp-accent-dim: #7A5A18;
+      --esp-pill: #3A2518;
+      --esp-pill-active: #5A3A20;
+      --esp-skip: #7A3B2E;
+      --esp-heart: #8B3A52;
+      --font: 'Georgia', serif;
+      --sans: system-ui, -apple-system, sans-serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: var(--esp-bg); }
+    body { display: flex; justify-content: center; align-items: flex-start; font-family: var(--sans); color: var(--esp-cream); }
+
+    #app {
+      width: 100%;
+      max-width: 430px;
+      min-height: 100dvh;
+      background: var(--esp-bg);
+      display: flex;
+      flex-direction: column;
+      padding-bottom: 64px;
+      position: relative;
+    }
+
+    .screen { display: none; flex-direction: column; flex: 1; }
+    .screen.active { display: flex; }
+
+    /* ── Top bar ── */
+    .top-bar { padding: 20px 20px 0; display: flex; align-items: center; justify-content: space-between; }
+    .wordmark { font-family: var(--font); font-size: 20px; color: var(--esp-cream); letter-spacing: 0.02em; }
+    .wordmark span { color: var(--esp-muted); font-size: 13px; display: block; font-family: var(--sans); letter-spacing: 0.08em; font-weight: 400; margin-top: -2px; }
+
+    /* ── Search ── */
+    .search-wrap { padding: 24px 20px 0; }
+    .search-box { background: var(--esp-surface); border: 1px solid var(--esp-border); border-radius: 14px; display: flex; align-items: center; gap: 10px; padding: 13px 16px; }
+    .search-box i { color: var(--esp-muted); font-size: 18px; }
+    .search-input { background: none; border: none; outline: none; color: var(--esp-cream); font-size: 15px; flex: 1; font-family: var(--sans); }
+    .search-input::placeholder { color: var(--esp-muted); }
+
+    /* ── Pills ── */
+    .genre-label { padding: 22px 20px 10px; font-size: 11px; letter-spacing: 0.12em; color: var(--esp-muted); text-transform: uppercase; }
+    .pills { padding: 0 20px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .pill { background: var(--esp-pill); border: 1px solid var(--esp-border); border-radius: 20px; padding: 7px 14px; font-size: 13px; color: var(--esp-muted); cursor: pointer; transition: all 0.18s; user-select: none; }
+    .pill.active, .pill:hover { background: var(--esp-pill-active); color: var(--esp-cream); border-color: var(--esp-accent-dim); }
+
+    /* ── Home recs ── */
+    .section-divider { height: 1px; background: var(--esp-border); margin: 28px 20px 0; }
+    .recs-label { padding: 20px 20px 0; }
+    .recs-label h2 { font-family: var(--font); font-size: 17px; color: var(--esp-cream); font-weight: normal; }
+    .recs-label p { font-size: 12px; color: var(--esp-muted); margin-top: 3px; }
+    .rec-scroll { padding: 16px 20px 0; display: flex; flex-direction: column; gap: 10px; }
+    .rec-row { background: var(--esp-surface); border: 1px solid var(--esp-border); border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: background 0.15s; }
+    .rec-row:hover { background: var(--esp-card); }
+    .rec-avatar { width: 46px; height: 46px; border-radius: 10px; background: var(--esp-pill); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .rec-avatar i { font-size: 20px; color: var(--esp-muted); }
+    .rec-info { flex: 1; }
+    .rec-info h3 { font-size: 14px; font-weight: 500; color: var(--esp-cream); }
+    .rec-info p { font-size: 12px; color: var(--esp-muted); margin-top: 2px; }
+    .rec-badge { font-size: 11px; background: var(--esp-pill); border: 1px solid var(--esp-accent-dim); color: var(--esp-muted); padding: 3px 8px; border-radius: 6px; }
+
+    /* ── Discover card ── */
+    .card-screen { align-items: center; }
+    .card-progress { padding: 16px 20px 0; width: 100%; display: flex; align-items: center; gap: 10px; }
+    .prog-dots { display: flex; gap: 5px; flex: 1; }
+    .prog-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--esp-border); }
+    .prog-dot.done { background: var(--esp-muted); }
+    .prog-dot.current { background: var(--esp-cream); }
+    .card-counter { font-size: 12px; color: var(--esp-muted); }
+
+    .artist-card { width: calc(100% - 40px); background: var(--esp-card); border: 1px solid var(--esp-border); border-radius: 20px; overflow: hidden; margin: 16px 0; flex-shrink: 0; }
+    .card-image { width: 100%; height: 220px; display: flex; align-items: center; justify-content: center; position: relative; }
+    .card-img-icon { font-size: 56px; color: var(--esp-border); }
+    .card-underground { position: absolute; top: 12px; right: 12px; background: rgba(28,20,16,0.85); border: 1px solid var(--esp-border); border-radius: 8px; padding: 5px 10px; }
+    .underground-label { font-size: 9px; letter-spacing: 0.1em; color: var(--esp-muted); text-transform: uppercase; }
+    .underground-val { font-size: 16px; font-weight: 600; color: var(--esp-cream); font-family: var(--font); margin-top: 1px; }
+
+    .card-meter-wrap { padding: 0 14px; margin-top: 10px; }
+    .card-meter-label { display: flex; justify-content: space-between; font-size: 10px; color: var(--esp-muted); margin-bottom: 4px; }
+    .card-meter-track { height: 3px; background: var(--esp-border); border-radius: 2px; }
+    .card-meter-fill { height: 100%; border-radius: 2px; background: var(--esp-muted); }
+
+    .card-body { padding: 14px 16px 16px; }
+    .card-artist-name { font-family: var(--font); font-size: 22px; color: var(--esp-cream); }
+    .card-genre { font-size: 12px; color: var(--esp-muted); margin-top: 2px; letter-spacing: 0.06em; }
+    .card-bio { font-size: 13px; color: var(--esp-muted); margin-top: 10px; line-height: 1.55; }
+    .card-tags { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+    .card-tag { font-size: 11px; background: var(--esp-pill); border: 1px solid var(--esp-border); color: var(--esp-muted); padding: 3px 9px; border-radius: 6px; }
+
+    /* ── Action buttons ── */
+    .action-hint { text-align: center; font-size: 11px; color: var(--esp-muted); padding-bottom: 4px; letter-spacing: 0.05em; }
+    .action-row { display: flex; justify-content: center; gap: 24px; padding: 0 0 8px; width: 100%; align-items: center; }
+    .btn-skip, .btn-heart { width: 62px; height: 62px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; font-size: 22px; transition: transform 0.12s; }
+    .btn-skip:active, .btn-heart:active { transform: scale(0.92); }
+    .btn-skip { background: var(--esp-skip); color: #F4A09A; }
+    .btn-heart { background: var(--esp-heart); color: #F4A0B8; }
+    .btn-info { width: 42px; height: 42px; border-radius: 50%; background: var(--esp-surface); border: 1px solid var(--esp-border); color: var(--esp-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; }
+
+    /* ── End of deck ── */
+    .end-card { padding: 40px 20px; text-align: center; width: 100%; }
+    .end-card i { font-size: 40px; color: var(--esp-muted); margin-bottom: 12px; }
+    .end-card h3 { font-family: var(--font); font-size: 20px; color: var(--esp-cream); }
+    .end-card p { font-size: 13px; color: var(--esp-muted); margin-top: 6px; }
+    .btn-restart { margin-top: 20px; background: var(--esp-surface); color: var(--esp-cream); border: 1px solid var(--esp-border); border-radius: 10px; padding: 12px 24px; font-size: 14px; cursor: pointer; font-family: var(--sans); }
+
+    /* ── Saved screen ── */
+    .saved-header { padding: 20px 20px 0; }
+    .saved-header h2 { font-family: var(--font); font-size: 22px; color: var(--esp-cream); font-weight: normal; }
+    .saved-header p { font-size: 13px; color: var(--esp-muted); margin-top: 3px; }
+    .saved-list { padding: 16px 20px 0; display: flex; flex-direction: column; gap: 10px; }
+    .saved-row { background: var(--esp-surface); border: 1px solid var(--esp-border); border-radius: 14px; padding: 14px; display: flex; align-items: center; gap: 12px; }
+    .saved-icon { width: 40px; height: 40px; border-radius: 9px; background: var(--esp-pill); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .saved-icon i { font-size: 18px; color: var(--esp-muted); }
+    .saved-info { flex: 1; }
+    .saved-info h3 { font-size: 15px; color: var(--esp-cream); font-weight: 500; }
+    .saved-info p { font-size: 12px; color: var(--esp-muted); margin-top: 2px; }
+    .saved-underbar { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+    .saved-meter-mini { flex: 1; height: 3px; background: var(--esp-border); border-radius: 2px; overflow: hidden; }
+    .saved-meter-fill-mini { height: 100%; border-radius: 2px; background: var(--esp-muted); }
+    .saved-pct { font-size: 10px; color: var(--esp-muted); }
+    .btn-spotify { background: #1A3A1A; border: 1px solid #2D6B2D; color: #4CAF50; border-radius: 8px; padding: 7px 11px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 5px; white-space: nowrap; font-family: var(--sans); flex-shrink: 0; }
+    .btn-spotify i { font-size: 14px; }
+    .empty-saved { text-align: center; padding: 50px 30px; color: var(--esp-muted); }
+    .empty-saved i { font-size: 40px; margin-bottom: 10px; display: block; }
+    .empty-saved p { font-size: 14px; }
+
+    /* ── Bottom nav ── */
+    .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 430px; height: 60px; background: var(--esp-surface); border-top: 1px solid var(--esp-border); display: flex; }
+    .nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; cursor: pointer; color: var(--esp-muted); background: none; border: none; transition: color 0.15s; font-family: var(--sans); }
+    .nav-btn i { font-size: 20px; }
+    .nav-btn span { font-size: 10px; letter-spacing: 0.05em; }
+    .nav-btn.active { color: var(--esp-cream); }
+
+    /* ── Toast ── */
+    .toast { position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%); background: var(--esp-surface); border: 1px solid var(--esp-border); color: var(--esp-cream); padding: 8px 18px; border-radius: 20px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; z-index: 100; }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HOME -->
+  <div id="screen-home" class="screen active">
+    <div class="top-bar">
+      <div class="wordmark">Velvet<span>music discovery</span></div>
+      <i class="ti ti-adjustments-horizontal" style="font-size:20px;color:var(--esp-muted);cursor:pointer" aria-hidden="true"></i>
+    </div>
+    <div class="search-wrap">
+      <div class="search-box">
+        <i class="ti ti-search" aria-hidden="true"></i>
+        <input class="search-input" placeholder="Type an artist you love..." />
+      </div>
+    </div>
+    <div class="genre-label">Quick picks</div>
+    <div class="pills">
+      <div class="pill active">Indie Folk</div>
+      <div class="pill">Dark Synth</div>
+      <div class="pill">Underground Hip-Hop</div>
+      <div class="pill">Lo-fi Soul</div>
+      <div class="pill">Neo-Psychedelia</div>
+      <div class="pill">Ambient Post-Rock</div>
+    </div>
+    <div class="section-divider"></div>
+    <div class="recs-label">
+      <h2>Picked for tonight</h2>
+      <p>Based on your taste profile</p>
+    </div>
+    <div class="rec-scroll" id="recScroll"></div>
+  </div>
+
+  <!-- DISCOVER -->
+  <div id="screen-discover" class="screen card-screen">
+    <div class="card-progress" style="width:100%">
+      <div class="prog-dots" id="progDots"></div>
+      <div class="card-counter" id="cardCounter"></div>
+    </div>
+    <div class="artist-card" id="artistCard"></div>
+    <div id="endCard" class="end-card" style="display:none">
+      <i class="ti ti-music-off" aria-hidden="true"></i>
+      <h3>You've seen them all</h3>
+      <p>Come back tomorrow for fresh finds</p>
+      <button class="btn-restart" onclick="resetDeck()">Shuffle again</button>
+    </div>
+    <div class="action-hint" id="actionHint">skip or save to your discoveries</div>
+    <div class="action-row">
+      <button class="btn-skip" onclick="skipArtist()" aria-label="Skip"><i class="ti ti-x" aria-hidden="true"></i></button>
+      <button class="btn-info" onclick="showToast('Tap the heart to save this artist')" aria-label="Info"><i class="ti ti-info-circle" aria-hidden="true"></i></button>
+      <button class="btn-heart" onclick="saveArtist()" aria-label="Save"><i class="ti ti-heart" aria-hidden="true"></i></button>
+    </div>
+  </div>
+
+  <!-- SAVED -->
+  <div id="screen-saved" class="screen">
+    <div class="saved-header">
+      <h2>My Discoveries</h2>
+      <p id="savedCount">0 hidden gems saved</p>
+    </div>
+    <div class="saved-list" id="savedList"></div>
+  </div>
+
+  <!-- NAV -->
+  <nav class="bottom-nav" role="navigation" aria-label="Main navigation">
+    <button class="nav-btn active" id="nav-home" onclick="switchScreen('home')" aria-label="Home">
+      <i class="ti ti-home" aria-hidden="true"></i><span>Home</span>
+    </button>
+    <button class="nav-btn" id="nav-discover" onclick="switchScreen('discover')" aria-label="Discover">
+      <i class="ti ti-sparkles" aria-hidden="true"></i><span>Discover</span>
+    </button>
+    <button class="nav-btn" id="nav-saved" onclick="switchScreen('saved')" aria-label="Saved">
+      <i class="ti ti-heart" aria-hidden="true"></i><span>Saved</span>
+    </button>
+  </nav>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+  const artists = [
+    { name: "Faye Webster", genre: "Indie Pop · Atlanta", bio: "Blends smooth country guitar with bedroom-pop vocals. Toured with Bon Iver before most people had heard of her.", underground: 12, icon: "ti-microphone-2", bg: "#2A1F35", tags: ["dreamy", "lo-fi", "introspective"] },
+    { name: "Horsegirl", genre: "Post-Punk · Chicago", bio: "Three teenagers channeling Television and The Breeders through a fog of reverb and tape hiss.", underground: 8, icon: "ti-guitar-pick", bg: "#1A2A20", tags: ["jangly", "raw", "angular"] },
+    { name: "Arooj Aftab", genre: "Neo-Sufi · Brooklyn", bio: "Grammy-winner fusing Pakistani classical music with jazz and ambient electronics. Hauntingly original.", underground: 15, icon: "ti-music", bg: "#1A202A", tags: ["ethereal", "poetic", "global"] },
+    { name: "billy woods", genre: "Underground Hip-Hop · NYC", bio: "Literary, opaque, relentless. Critics say he writes the best rap lyrics alive. The mainstream hasn't caught on.", underground: 6, icon: "ti-writing", bg: "#2A1A1A", tags: ["dense", "cinematic", "lyrical"] },
+    { name: "Arca", genre: "Avant-Club · Venezuela/London", bio: "Sound designer for Björk and Kanye. Her solo work is fractured, beautiful, and genuinely alien.", underground: 9, icon: "ti-wave-sine", bg: "#2A2A1A", tags: ["experimental", "textural", "futuristic"] },
+    { name: "Mk.gee", genre: "Dark Pop · New Jersey", bio: "Liquid guitar tones and clouded vocals. Took four years to make his debut. It shows — in the best way.", underground: 22, icon: "ti-headphones", bg: "#1F1A2A", tags: ["hazy", "obsessive", "tender"] },
+  ];
+
+  const quickRecs = [
+    { name: "Yves Tumor", genre: "Art Rock", underground: 18, icon: "ti-flame" },
+    { name: "Julie Byrne", genre: "Indie Folk", underground: 7, icon: "ti-leaf" },
+    { name: "Slauson Malone 1", genre: "Avant Hip-Hop", underground: 4, icon: "ti-music" },
+  ];
+
+  let currentIdx = 0;
+  let saved = [];
+
+  function renderRecScroll() {
+    document.getElementById('recScroll').innerHTML = quickRecs.map(r => `
+      <div class="rec-row" onclick="switchScreen('discover')">
+        <div class="rec-avatar"><i class="ti ${r.icon}" aria-hidden="true"></i></div>
+        <div class="rec-info">
+          <h3>${r.name}</h3>
+          <p>${r.genre}</p>
+        </div>
+        <div class="rec-badge">${r.underground}% known</div>
+      </div>
+    `).join('');
+  }
+
+  function renderCard() {
+    const card = document.getElementById('artistCard');
+    const end = document.getElementById('endCard');
+    const hint = document.getElementById('actionHint');
+
+    if (currentIdx >= artists.length) {
+      card.style.display = 'none';
+      end.style.display = 'block';
+      hint.style.display = 'none';
+      document.querySelectorAll('.action-row button').forEach(b => b.style.opacity = '0.3');
+      return;
+    }
+
+    card.style.display = 'block';
+    end.style.display = 'none';
+    hint.style.display = 'block';
+    document.querySelectorAll('.action-row button').forEach(b => b.style.opacity = '1');
+
+    const a = artists[currentIdx];
+    card.innerHTML = `
+      <div class="card-image" style="background:${a.bg}">
+        <i class="ti ${a.icon} card-img-icon" aria-hidden="true"></i>
+        <div class="card-underground">
+          <div class="underground-label">Underground</div>
+          <div class="underground-val">${a.underground}%</div>
+        </div>
+      </div>
+      <div class="card-meter-wrap">
+        <div class="card-meter-label"><span>Mainstream</span><span>Hidden gem</span></div>
+        <div class="card-meter-track"><div class="card-meter-fill" style="width:${100 - a.underground * 2.5}%"></div></div>
+      </div>
+      <div class="card-body">
+        <div class="card-artist-name">${a.name}</div>
+        <div class="card-genre">${a.genre}</div>
+        <div class="card-bio">${a.bio}</div>
+        <div class="card-tags">${a.tags.map(t => `<span class="card-tag">${t}</span>`).join('')}</div>
+      </div>
+    `;
+
+    document.getElementById('progDots').innerHTML = artists.map((_, i) =>
+      `<div class="prog-dot ${i < currentIdx ? 'done' : i === currentIdx ? 'current' : ''}"></div>`
+    ).join('');
+    document.getElementById('cardCounter').textContent = `${currentIdx + 1} / ${artists.length}`;
+  }
+
+  function skipArtist() {
+    if (currentIdx >= artists.length) return;
+    animateCard('left');
+    setTimeout(() => { currentIdx++; renderCard(); }, 220);
+  }
+
+  function saveArtist() {
+    if (currentIdx >= artists.length) return;
+    const a = artists[currentIdx];
+    if (!saved.find(s => s.name === a.name)) { saved.push(a); updateSavedBadge(); }
+    showToast(`Saved "${a.name}"`);
+    animateCard('right');
+    setTimeout(() => { currentIdx++; renderCard(); }, 220);
+  }
+
+  function animateCard(dir) {
+    const card = document.getElementById('artistCard');
+    card.style.transition = 'transform 0.22s, opacity 0.22s';
+    card.style.transform = `translateX(${dir === 'left' ? '-80px' : '80px'}) rotate(${dir === 'left' ? '-4deg' : '4deg'})`;
+    card.style.opacity = '0';
+    setTimeout(() => { card.style.transition = 'none'; card.style.transform = ''; card.style.opacity = '1'; }, 240);
+  }
+
+  function resetDeck() { currentIdx = 0; renderCard(); }
+
+  function renderSaved() {
+    document.getElementById('savedCount').textContent = `${saved.length} hidden gem${saved.length !== 1 ? 's' : ''} saved`;
+    if (!saved.length) {
+      document.getElementById('savedList').innerHTML = `
+        <div class="empty-saved">
+          <i class="ti ti-music-off" aria-hidden="true"></i>
+          <p>Nothing saved yet — head to Discover and tap the heart</p>
+        </div>`;
+      return;
+    }
+    document.getElementById('savedList').innerHTML = saved.map(a => `
+      <div class="saved-row">
+        <div class="saved-icon"><i class="ti ${a.icon}" aria-hidden="true"></i></div>
+        <div class="saved-info">
+          <h3>${a.name}</h3>
+          <p>${a.genre}</p>
+          <div class="saved-underbar">
+            <div class="saved-meter-mini"><div class="saved-meter-fill-mini" style="width:${100 - a.underground * 2.5}%"></div></div>
+            <span class="saved-pct">${a.underground}% known</span>
+          </div>
+        </div>
+        <button class="btn-spotify" onclick="showToast('Opening Spotify...')">
+          <i class="ti ti-external-link" aria-hidden="true"></i> Spotify
+        </button>
+      </div>
+    `).join('');
+  }
+
+  function updateSavedBadge() {
+    document.getElementById('nav-saved').querySelector('span').textContent =
+      saved.length > 0 ? `Saved (${saved.length})` : 'Saved';
+  }
+
+  function switchScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(`screen-${id}`).classList.add('active');
+    document.getElementById(`nav-${id}`).classList.add('active');
+    if (id === 'saved') renderSaved();
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  document.querySelectorAll('.pill').forEach(p => {
+    p.addEventListener('click', () => {
+      document.querySelectorAll('.pill').forEach(x => x.classList.remove('active'));
+      p.classList.add('active');
+    });
+  });
+
+  renderRecScroll();
+  renderCard();
+</script>
+</body>
+</html>
