@@ -18,9 +18,11 @@
  * remove the secret from js/config.js.
  */
 
-import { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } from '../../config.js';
-import { saveToCache, getFromCache, clearCache }     from '../storageService.js';
-import { get as cacheGet }                           from '../../core/cache.js';
+import { saveToCache, getFromCache, clearCache } from '../storageService.js';
+import { get as cacheGet }                       from '../../core/cache.js';
+
+// Credentials injected by js/config.js (plain <script> loaded before this module)
+const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } = window.ENV ?? {};
 
 const API      = 'https://api.spotify.com/v1';
 const ACCOUNTS = 'https://accounts.spotify.com';
