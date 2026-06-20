@@ -26,32 +26,39 @@
 
 import { aggregate, getFeaturedFromAll } from './platformAggregator.js';
 import { getState, setState } from '../core/store.js';
+import { get as cacheGet } from '../core/cache.js';
+
+const FEED_TTL   = 10 * 60 * 1000;  // 10 min — curated feed changes slowly
+const SEARCH_TTL =  5 * 60 * 1000;  //  5 min — searches can be a bit fresher
 
 /**
  * Return a ranked feed of artists, optionally filtered by genre.
  * Ranking: higher underground score → earlier in list.
+ * Results are cached; stale data is served when the network is unavailable.
  *
  * @param {FeedOptions} [options]
  * @returns {Promise<Artist[]>}
  */
 export async function getFeed({ genre = null, limit = 20 } = {}) {
-  let artists = await getFeaturedFromAll();
-
-  if (genre) {
-    const g = genre.toLowerCase();
-    artists = artists.filter(a =>
-      a.tags.some(t => t.toLowerCase().includes(g)) ||
-      a.genre.toLowerCase().includes(g)
-    );
-  }
-
-  return artists
-    .sort((a, b) => b.underground - a.underground)
-    .slice(0, limit);
+  const key = `feed:${genre ?? 'all'}:${limit}`;
+  return cacheGet(key, async () => {
+    let artists = await getFeaturedFromAll();
+    if (genre) {
+      const g = genre.toLowerCase();
+      artists = artists.filter(a =>
+        a.tags.some(t => t.toLowerCase().includes(g)) ||
+        a.genre.toLowerCase().includes(g)
+      );
+    }
+    return artists
+      .sort((a, b) => b.underground - a.underground)
+      .slice(0, limit);
+  }, FEED_TTL);
 }
 
 /**
  * Search all platforms for a query string.
+ * Results are cached per query; stale data is served when offline.
  *
  * @param {string} query
  * @param {SearchOptions} [options]
@@ -59,8 +66,8 @@ export async function getFeed({ genre = null, limit = 20 } = {}) {
  */
 export async function search(query, { limit = 20 } = {}) {
   if (!query.trim()) return [];
-  const results = await aggregate(query);
-  return results.slice(0, limit);
+  const key = `search:${query.toLowerCase().trim()}:${limit}`;
+  return cacheGet(key, () => aggregate(query).then(r => r.slice(0, limit)), SEARCH_TTL);
 }
 
 /**
