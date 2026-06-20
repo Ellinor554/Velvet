@@ -101,3 +101,33 @@ function resetDeck() {
   currentIdx = 0;
   renderCard();
 }
+
+/**
+ * Replace the current deck with a new set of artists and reset to card 1.
+ * Called by app.js after a search-by-artist completes.
+ * @param {import('../services/discoveryService.js').Artist[]} artists
+ */
+export function loadArtists(artists) {
+  feed       = artists;
+  currentIdx = 0;
+  renderCard();
+}
+
+/** Show a loading state while a search is in flight. */
+export function setLoading(on) {
+  const card = document.getElementById('artistCard');
+  const hint = document.getElementById('actionHint');
+  const btns = document.querySelectorAll('.action-row button');
+  if (on) {
+    card.style.display = 'block';
+    card.innerHTML = `
+      <div style="height:300px;display:flex;align-items:center;justify-content:center;
+                  flex-direction:column;gap:12px;color:var(--esp-muted)">
+        <i class="ti ti-loader-2" style="font-size:36px"></i>
+        <p style="font-size:13px;letter-spacing:0.05em">Finding underground artists…</p>
+      </div>`;
+    document.getElementById('endCard').style.display = 'none';
+    hint.style.display = 'none';
+    btns.forEach(b => b.style.opacity = '0.3');
+  }
+}

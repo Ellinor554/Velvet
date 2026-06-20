@@ -24,7 +24,7 @@
  * @property {number} [limit] - Max results (default 20)
  */
 
-import { aggregate, getFeaturedFromAll } from './platformAggregator.js';
+import { aggregate, getFeaturedFromAll, findSimilarArtists } from './platformAggregator.js';
 import { getState, setState } from '../core/store.js';
 import { get as cacheGet } from '../core/cache.js';
 import { toggleFavoriteArtist, isFavorite } from './storageService.js';
@@ -103,4 +103,16 @@ export function getSaved() {
 /** @param {string} artistId @returns {boolean} */
 export function isSaved(artistId) {
   return isFavorite(artistId);
+}
+
+/**
+ * Find underground artists with a similar sound to the named artist.
+ * The named artist can be mainstream — their genres are used as the pivot.
+ *
+ * @param {string} artistName
+ * @returns {Promise<Artist[]>}
+ */
+export async function searchByArtist(artistName) {
+  if (!artistName.trim()) return [];
+  return findSimilarArtists(artistName.trim());
 }

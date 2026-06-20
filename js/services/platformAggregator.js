@@ -58,3 +58,22 @@ export async function getFeaturedFromAll() {
     .flatMap(r => r.value);
   return dedupe(artists);
 }
+
+/**
+ * Find underground artists similar to the named artist.
+ * Uses genre-pivoting on platforms that support it (Spotify).
+ * Platforms without findSimilarArtists() are silently skipped.
+ *
+ * @param {string} artistName
+ * @returns {Promise<import('./discoveryService.js').Artist[]>}
+ */
+export async function findSimilarArtists(artistName) {
+  const platforms = PLATFORMS.filter(p => typeof p.findSimilarArtists === 'function');
+  const settled   = await Promise.allSettled(
+    platforms.map(p => p.findSimilarArtists(artistName))
+  );
+  const artists = settled
+    .filter(r => r.status === 'fulfilled')
+    .flatMap(r => r.value);
+  return dedupe(artists);
+}
