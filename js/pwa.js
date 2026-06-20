@@ -6,7 +6,7 @@
  * All discovery logic stays in discoveryService; all state stays in store.
  */
 
-const SW_PATH = '/sw.js';
+const SW_PATH = './sw.js';
 
 async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) {
