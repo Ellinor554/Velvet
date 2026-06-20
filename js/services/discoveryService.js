@@ -27,6 +27,7 @@
 import { aggregate, getFeaturedFromAll } from './platformAggregator.js';
 import { getState, setState } from '../core/store.js';
 import { get as cacheGet } from '../core/cache.js';
+import { toggleFavoriteArtist, isFavorite } from './storageService.js';
 
 const FEED_TTL   = 10 * 60 * 1000;  // 10 min — curated feed changes slowly
 const SEARCH_TTL =  5 * 60 * 1000;  //  5 min — searches can be a bit fresher
@@ -82,38 +83,24 @@ export async function getRecommendations({ limit = 3 } = {}) {
 }
 
 /**
- * Persist an artist to the saved collection.
- * No-ops silently if the artist is already saved.
+ * Toggle an artist in/out of the saved collection.
+ * Persists via storageService and syncs in-memory state.
  *
  * @param {Artist} artist
+ * @returns {boolean} true if the artist is now saved, false if removed
  */
 export function saveArtist(artist) {
-  const { saved } = getState();
-  if (saved.some(a => a.id === artist.id)) return;
-  setState({ saved: [...saved, artist] });
+  const updated = toggleFavoriteArtist(artist);
+  setState({ saved: updated });
+  return updated.some(a => a.id === artist.id);
 }
 
-/**
- * Remove an artist from the saved collection.
- *
- * @param {string} artistId
- */
-export function unsaveArtist(artistId) {
-  const { saved } = getState();
-  setState({ saved: saved.filter(a => a.id !== artistId) });
-}
-
-/**
- * @returns {Artist[]}
- */
+/** @returns {Artist[]} */
 export function getSaved() {
   return getState().saved;
 }
 
-/**
- * @param {string} artistId
- * @returns {boolean}
- */
+/** @param {string} artistId @returns {boolean} */
 export function isSaved(artistId) {
-  return getState().saved.some(a => a.id === artistId);
+  return isFavorite(artistId);
 }

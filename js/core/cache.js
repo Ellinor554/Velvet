@@ -1,78 +1,58 @@
 /**
- * Async keyed cache with offline fallback.
+ * In-memory async cache with persistent fallback via storageService.
  *
- * Strategy (in order):
- *   1. Return in-memory entry if still within TTL  (instant)
- *   2. Fetch fresh data, write to memory + localStorage  (online)
- *   3. On network failure, return stale memory entry if available
- *   4. On network failure, return stale localStorage entry if available
- *   5. Re-throw — caller decides how to handle a true offline+no-cache miss
+ * Lookup order:
+ *   1. In-memory Map — instant, session-scoped
+ *   2. storageService (localStorage) — survives page refresh
+ *   3. fetcher() — live network call
  *
- * PWA integration path:
- *   When a service worker is introduced, it can intercept the underlying
- *   fetch() calls and populate CacheStorage independently. Alternatively,
- *   swap the localStorage writes below for CacheStorage.put() — the
- *   interface of this module (get / invalidate / invalidateAll) stays identical.
+ * On network failure the same order applies in reverse:
+ * stale memory → stale localStorage → re-throw.
+ *
+ * PWA upgrade path:
+ *   When a caching service worker is active, its CacheStorage responses
+ *   will fulfil fetch() before it rejects, so offline resilience improves
+ *   automatically without changes here.
  */
 
-const PREFIX = 'velvet_cache_';
+import { saveToCache, getFromCache } from '../services/storageService.js';
 
 /** @type {Map<string, {value: any, fetchedAt: number}>} */
 const mem = new Map();
 
 /**
- * Return a cached value for `key`, or call `fetcher` to produce one.
- *
  * @template T
- * @param {string} key
- * @param {() => Promise<T>} fetcher
- * @param {number} [ttlMs=600000]  10 minutes default
+ * @param {string}            key
+ * @param {() => Promise<T>}  fetcher
+ * @param {number}            [ttlMs=600000]  10 minutes
  * @returns {Promise<T>}
  */
 export async function get(key, fetcher, ttlMs = 10 * 60 * 1000) {
   const now = Date.now();
   const hit = mem.get(key);
 
-  if (hit && now - hit.fetchedAt < ttlMs) {
-    return hit.value;
-  }
+  if (hit && now - hit.fetchedAt < ttlMs) return hit.value;
 
   try {
     const value = await fetcher();
-    const entry = { value, fetchedAt: now };
-    mem.set(key, entry);
-    try { localStorage.setItem(PREFIX + key, JSON.stringify(entry)); } catch (_) {}
+    mem.set(key, { value, fetchedAt: now });
+    saveToCache(key, value, ttlMs / 60_000);
     return value;
   } catch (err) {
-    // Network failure — serve stale rather than crashing
     if (hit) return hit.value;
-
-    try {
-      const raw = localStorage.getItem(PREFIX + key);
-      if (raw) {
-        const entry = JSON.parse(raw);
-        mem.set(key, entry);
-        return entry.value;
-      }
-    } catch (_) {}
-
+    const stored = getFromCache(key);
+    if (stored !== null) {
+      mem.set(key, { value: stored, fetchedAt: now });
+      return stored;
+    }
     throw err;
   }
 }
 
 /**
- * @param {string} key
+ * @param {string} [key]  Omit to clear all in-memory entries.
  */
 export function invalidate(key) {
-  mem.delete(key);
-  try { localStorage.removeItem(PREFIX + key); } catch (_) {}
-}
-
-export function invalidateAll() {
+  if (key) { mem.delete(key); return; }
   mem.clear();
-  try {
-    Object.keys(localStorage)
-      .filter(k => k.startsWith(PREFIX))
-      .forEach(k => localStorage.removeItem(k));
-  } catch (_) {}
 }
