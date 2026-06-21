@@ -68,10 +68,13 @@ export async function getFeaturedFromAll() {
  * @returns {Promise<import('./discoveryService.js').Artist[]>}
  */
 export async function findSimilarArtists(artistName) {
-  const platforms = PLATFORMS.filter(p => typeof p.findSimilarArtists === 'function');
-  const settled   = await Promise.allSettled(
-    platforms.map(p => p.findSimilarArtists(artistName))
-  );
+  const withSimilar = PLATFORMS.filter(p => typeof p.findSimilarArtists === 'function');
+  const withSearch  = PLATFORMS.filter(p => typeof p.findSimilarArtists !== 'function');
+
+  const settled = await Promise.allSettled([
+    ...withSimilar.map(p => p.findSimilarArtists(artistName)),
+    ...withSearch.map(p => p.search(artistName)),
+  ]);
   const artists = settled
     .filter(r => r.status === 'fulfilled')
     .flatMap(r => r.value);

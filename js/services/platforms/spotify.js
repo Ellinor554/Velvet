@@ -17,7 +17,7 @@ const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } = window.ENV ?? {};
 const API      = 'https://api.spotify.com/v1';
 const ACCOUNTS = 'https://accounts.spotify.com';
 const TOKEN_KEY            = 'sp_token';
-const POPULARITY_CEILING   = 30;
+const POPULARITY_CEILING   = 45;
 
 // ── Token management ─────────────────────────────────────────────────────────
 
@@ -189,15 +189,24 @@ export async function findSimilarArtists(artistName) {
     const genres  = seed?.genres ?? [];
 
     // 3. Build a genre-based query to find similar underground artists
-    const query = genres.length
-      ? genres.slice(0, 2).map(g => `genre:"${g}"`).join(' ')
-      : artistName;
+    // Use only the primary genre to avoid Spotify rejecting multi-genre filters
+    const primaryGenre = genres[0];
+    const query = primaryGenre ? `genre:"${primaryGenre}"` : artistName;
 
     const data   = await apiFetch(`/search?q=${encodeURIComponent(query)}&type=artist&limit=50`);
     const simple = (data.artists?.items ?? []).filter(a => a.id !== seedSimple.id);
     const full   = await enrichArtists(simple);
+    const underground = full.filter(isUnderground);
 
-    return full.filter(isUnderground).map(mapArtist);
+    // Fallback: if genre pivot gives nothing, search directly by artist name
+    if (underground.length === 0) {
+      const fallbackData   = await apiFetch(`/search?q=${encodeURIComponent(artistName)}&type=artist&limit=50`);
+      const fallbackSimple = (fallbackData.artists?.items ?? []).filter(a => a.id !== seedSimple.id);
+      const fallbackFull   = await enrichArtists(fallbackSimple);
+      return fallbackFull.filter(isUnderground).map(mapArtist);
+    }
+
+    return underground.map(mapArtist);
   }, SEARCH_TTL_MS);
 }
 
