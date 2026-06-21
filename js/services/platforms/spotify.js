@@ -64,8 +64,9 @@ async function apiFetch(path) {
 
 async function enrichArtists(simpleArtists) {
   if (!simpleArtists.length) return [];
-  // Cap at 50 to keep to a single API call and avoid timeouts
-  const ids = [...new Set(simpleArtists.map(a => a.id))].slice(0, 50);
+  // filter(Boolean) removes any null/undefined IDs that would corrupt the ?ids= param
+  const ids = [...new Set(simpleArtists.map(a => a.id).filter(Boolean))].slice(0, 50);
+  if (!ids.length) return [];
   const batches = [];
   for (let i = 0; i < ids.length; i += 50) batches.push(ids.slice(i, i + 50));
 
@@ -192,13 +193,15 @@ export async function findSimilarArtists(artistName) {
     const genres  = seed?.genres ?? [];
     console.log('[Spotify] seed artist:', seedSimple.name, '| genres:', genres);
 
-    // 3. Run genre searches sequentially to avoid overwhelming Spotify with
-    //    concurrent requests (which causes 408 timeouts).
-    const queries = genres.length ? genres.slice(0, 2) : [artistName];
-    console.log('[Spotify] seed:', seedSimple.name, '| genres:', genres, '| querying:', queries);
+    // 3. Run genre searches sequentially — filter out blank genre strings
+    //    before building queries so we never send q= (empty) to Spotify.
+    const validGenres = genres.filter(g => g?.trim());
+    const queries     = validGenres.length ? validGenres.slice(0, 2) : [artistName];
+    console.log('[Spotify] seed:', seedSimple.name, '| querying:', queries);
 
     const simple = [];
     for (const q of queries) {
+      if (!q?.trim()) continue;
       try {
         const data = await apiFetch(`/search?q=${encodeURIComponent(q)}&type=artist&limit=20`);
         const items = (data.artists?.items ?? []).filter(a => a.id !== seedSimple.id);
