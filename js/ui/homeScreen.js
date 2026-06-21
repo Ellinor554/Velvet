@@ -1,5 +1,21 @@
-import { getRecommendations } from '../services/discoveryService.js';
+import { searchByArtist, searchByGenre } from '../services/discoveryService.js';
+import { getHistory } from '../core/history.js';
 import { switchScreen } from './nav.js';
+
+const DEFAULT_GENRES = ['shoegaze', 'post-punk', 'darkwave', 'lo-fi', 'dream pop', 'bedroom pop'];
+
+function pickRandom(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 /**
  * @param {{ onSearch: (query: string) => void, onGenreSearch: (genre: string) => void }} [options]
@@ -10,23 +26,72 @@ export async function initHomeScreen({ onSearch, onGenreSearch } = {}) {
 }
 
 async function renderRecommendations() {
-  const recs = await getRecommendations({ limit: 3 });
   const container = document.getElementById('recScroll');
+  const label     = document.querySelector('.recs-label p');
 
-  container.innerHTML = recs.map(r => `
-    <div class="rec-row" data-nav="discover">
-      <div class="rec-avatar"><i class="ti ${r.icon}" aria-hidden="true"></i></div>
-      <div class="rec-info">
-        <h3>${r.name}</h3>
-        <p>${r.genre}</p>
-      </div>
-      <div class="rec-badge">${r.underground}% known</div>
-    </div>
-  `).join('');
+  container.innerHTML = `
+    <div style="padding:16px 0;display:flex;align-items:center;gap:10px;color:var(--esp-muted);font-size:13px">
+      <i class="ti ti-loader-2" style="font-size:18px"></i> Finding picks…
+    </div>`;
 
-  container.addEventListener('click', e => {
-    if (e.target.closest('[data-nav]')) switchScreen('discover');
-  });
+  try {
+    const history = getHistory();
+    let artists = [];
+    let sourceLabel = 'Based on your taste profile';
+
+    if (history.length > 0) {
+      const pick = pickRandom(history);
+      const results = pick.type === 'artist'
+        ? await searchByArtist(pick.term)
+        : await searchByGenre(pick.term);
+      artists = shuffle(results).slice(0, 3);
+      sourceLabel = `Because you searched "${pick.term}"`;
+    } else {
+      const genre = pickRandom(DEFAULT_GENRES);
+      const results = await searchByGenre(genre);
+      artists = shuffle(results).slice(0, 3);
+      sourceLabel = `Featuring ${genre}`;
+    }
+
+    if (label) label.textContent = sourceLabel;
+
+    if (!artists.length) {
+      container.innerHTML = `<p style="font-size:13px;color:var(--esp-muted);padding:8px 0">No picks right now — search for an artist to get started.</p>`;
+      return;
+    }
+
+    container.innerHTML = artists.map(a => {
+      const spotifyUrl = a.platforms?.spotify?.url ?? '';
+      return `
+        <div class="rec-row" ${spotifyUrl ? `data-spotify-url="${spotifyUrl}"` : ''}>
+          <div class="rec-avatar" style="background:${a.bg}">
+            <i class="ti ${a.icon}" aria-hidden="true"></i>
+          </div>
+          <div class="rec-info">
+            <h3>${a.name}</h3>
+            <p>${a.genre}</p>
+          </div>
+          <div class="rec-row-right">
+            <div class="rec-badge">${a.underground}% known</div>
+            ${spotifyUrl ? `<button class="rec-spotify-btn" data-spotify-url="${spotifyUrl}" aria-label="Open on Spotify"><i class="ti ti-brand-spotify"></i></button>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+
+    container.addEventListener('click', e => {
+      const spotifyBtn = e.target.closest('.rec-spotify-btn');
+      if (spotifyBtn) {
+        e.stopPropagation();
+        window.open(spotifyBtn.dataset.spotifyUrl, '_blank', 'noopener');
+        return;
+      }
+      if (e.target.closest('.rec-row')) switchScreen('discover');
+    });
+
+  } catch (err) {
+    console.error('[Home] Recs failed:', err);
+    container.innerHTML = `<p style="font-size:13px;color:var(--esp-muted);padding:8px 0">Could not load picks — check your connection.</p>`;
+  }
 }
 
 function initSearch(onArtistSearch, onGenreSearch) {

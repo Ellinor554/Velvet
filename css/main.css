@@ -61,10 +61,13 @@ body { display: flex; justify-content: center; align-items: flex-start; font-fam
 .rec-row:hover { background: var(--esp-card); }
 .rec-avatar { width: 46px; height: 46px; border-radius: 10px; background: var(--esp-pill); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .rec-avatar i { font-size: 20px; color: var(--esp-muted); }
-.rec-info { flex: 1; }
-.rec-info h3 { font-size: 14px; font-weight: 500; color: var(--esp-cream); }
-.rec-info p { font-size: 12px; color: var(--esp-muted); margin-top: 2px; }
-.rec-badge { font-size: 11px; background: var(--esp-pill); border: 1px solid var(--esp-accent-dim); color: var(--esp-muted); padding: 3px 8px; border-radius: 6px; }
+.rec-info { flex: 1; min-width: 0; }
+.rec-info h3 { font-size: 14px; font-weight: 500; color: var(--esp-cream); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rec-info p { font-size: 12px; color: var(--esp-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rec-row-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+.rec-badge { font-size: 11px; background: var(--esp-pill); border: 1px solid var(--esp-accent-dim); color: var(--esp-muted); padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+.rec-spotify-btn { background: none; border: none; color: #4CAF50; font-size: 16px; cursor: pointer; padding: 2px; line-height: 1; opacity: 0.7; transition: opacity 0.15s; }
+.rec-spotify-btn:hover { opacity: 1; }
 
 /* ── Discover card ── */
 .card-screen { align-items: center; }

@@ -72,17 +72,6 @@ export async function search(query, { limit = 20 } = {}) {
 }
 
 /**
- * Return a short list of personalized recommendations for the home screen.
- * Currently returns the highest-underground-scored artists from the feed.
- *
- * @param {{ limit?: number }} [options]
- * @returns {Promise<Artist[]>}
- */
-export async function getRecommendations({ limit = 3 } = {}) {
-  return getFeed({ limit });
-}
-
-/**
  * Toggle an artist in/out of the saved collection.
  * Persists via storageService and syncs in-memory state.
  *

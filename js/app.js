@@ -4,10 +4,12 @@ import { initDiscoverScreen, loadArtists, setLoading } from './ui/discoverScreen
 import { initSavedScreen, renderSavedScreen }       from './ui/savedScreen.js';
 import { subscribe, getState }                      from './core/store.js';
 import { searchByArtist, searchByGenre }            from './services/discoveryService.js';
+import { addToHistory }                             from './core/history.js';
 import { showToast }                                from './ui/toast.js';
 import './pwa.js';
 
-async function runSearch(label, fetcher) {
+async function runSearch(label, fetcher, type) {
+  addToHistory(label, type);
   switchScreen('discover');
   setLoading(true);
   try {
@@ -33,8 +35,8 @@ async function init() {
 
   await Promise.all([
     initHomeScreen({
-      onSearch:      query => runSearch(query, () => searchByArtist(query)),
-      onGenreSearch: genre => runSearch(genre, () => searchByGenre(genre)),
+      onSearch:      query => runSearch(query, () => searchByArtist(query), 'artist'),
+      onGenreSearch: genre => runSearch(genre, () => searchByGenre(genre), 'genre'),
     }),
     initDiscoverScreen(),
   ]);
