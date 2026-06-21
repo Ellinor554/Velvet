@@ -53,20 +53,27 @@ function normalise(a) {
   // Already in internal format (Worker pre-mapped the response)
   if (a.underground !== undefined && typeof a.icon === 'string') return a;
 
-  // Map from Spotify full-artist format
-  const genres    = a.genres ?? [];
-  const icon      = [...GENRE_ICONS.entries()]
+  // Spotify's search endpoint returns simplified objects — genres, popularity,
+  // and followers are not included. Use image count as a rough underground proxy:
+  // 0 images → very unknown, 3 images → more established.
+  const genres     = a.genres ?? [];
+  const imageCount = a.images?.length ?? 0;
+  const underground = a.popularity ?? (imageCount === 0 ? 8 : imageCount < 3 ? 25 : 45);
+
+  const icon = [...GENRE_ICONS.entries()]
     .find(([key]) => genres.some(g => g.includes(key)))?.[1] ?? 'ti-music';
-  const bg        = BG_PALETTE[parseInt((a.id ?? '00').slice(-2), 16) % BG_PALETTE.length];
-  const followers = fmt.format(a.followers?.total ?? 0);
-  const genreStr  = genres.length ? ` Sound: ${genres.slice(0, 3).join(', ')}.` : '';
+  const bg   = BG_PALETTE[parseInt((a.id ?? '00').slice(-2), 16) % BG_PALETTE.length];
+
+  const followers = a.followers?.total != null
+    ? fmt.format(a.followers.total) + ' followers on Spotify.'
+    : 'Found on Spotify.';
 
   return {
     id:          `sp_${a.id}`,
     name:         a.name,
     genre:        genres.slice(0, 2).join(' · ') || 'Independent',
-    bio:         `${followers} followers on Spotify.${genreStr}`,
-    underground:  a.popularity,
+    bio:          followers,
+    underground,
     icon,
     bg,
     tags:         genres.slice(0, 3).map(g => g.replace(/-/g, ' ')),
