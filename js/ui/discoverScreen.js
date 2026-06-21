@@ -1,4 +1,5 @@
 import { getFeed, saveArtist } from '../services/discoveryService.js';
+import { addGenre, hasGenre }   from '../core/genres.js';
 import { showToast }            from './toast.js';
 
 /** @type {import('../services/discoveryService.js').Artist[]} */
@@ -140,4 +141,41 @@ export function setLoading(on) {
     hint.style.display = 'none';
     btns.forEach(b => b.style.opacity = '0.3');
   }
+}
+
+/**
+ * Show a contextual header above the card deck for the current search.
+ * For genre searches, includes an "Add to library" button.
+ * @param {string} label
+ * @param {'artist'|'genre'} type
+ */
+export function showSearchHeader(label, type) {
+  const header = document.getElementById('searchHeader');
+  if (!header) return;
+
+  const already = type === 'genre' && hasGenre(label);
+  header.style.display = 'flex';
+  header.innerHTML = `
+    <span class="search-header-label">Results for <strong>${label}</strong></span>
+    ${type === 'genre' ? `
+      <button class="btn-add-genre ${already ? 'saved' : ''}" id="btnAddGenre" ${already ? 'disabled' : ''}>
+        <i class="ti ${already ? 'ti-check' : 'ti-plus'}"></i>
+        ${already ? 'In library' : 'Add to library'}
+      </button>` : ''}`;
+
+  if (type === 'genre' && !already) {
+    header.querySelector('#btnAddGenre').addEventListener('click', () => {
+      addGenre(label);
+      const btn = header.querySelector('#btnAddGenre');
+      btn.className = 'btn-add-genre saved';
+      btn.disabled  = true;
+      btn.innerHTML = '<i class="ti ti-check"></i> In library';
+      window.dispatchEvent(new CustomEvent('velvet:genreAdded', { detail: { genre: label } }));
+    });
+  }
+}
+
+export function hideSearchHeader() {
+  const header = document.getElementById('searchHeader');
+  if (header) header.style.display = 'none';
 }

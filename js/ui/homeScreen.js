@@ -1,5 +1,6 @@
 import { searchByArtist, searchByGenre } from '../services/discoveryService.js';
 import { getHistory } from '../core/history.js';
+import { getSavedGenres } from '../core/genres.js';
 import { switchScreen } from './nav.js';
 
 const DEFAULT_GENRES = ['shoegaze', 'post-punk', 'darkwave', 'lo-fi', 'dream pop', 'bedroom pop'];
@@ -17,13 +18,42 @@ function shuffle(arr) {
   return a;
 }
 
+function capitalize(str) {
+  return str.replace(/\b\w/g, c => c.toUpperCase());
+}
+
 /**
  * @param {{ onSearch: (query: string) => void, onGenreSearch: (genre: string) => void }} [options]
  */
 export async function initHomeScreen({ onSearch, onGenreSearch } = {}) {
+  renderGenreChips(onGenreSearch);
+  window.addEventListener('velvet:genreAdded', () => renderGenreChips(onGenreSearch));
   await renderRecommendations();
   initSearch(onSearch, onGenreSearch);
 }
+
+// ── Genre chips ──────────────────────────────────────────────────────────────
+
+function renderGenreChips(onGenreSearch) {
+  const container = document.getElementById('genreChips');
+  if (!container) return;
+
+  const genres = getSavedGenres();
+  container.innerHTML = genres.length
+    ? genres.map(g => `<button class="genre-chip" data-genre="${g}">${capitalize(g)}</button>`).join('')
+    : DEFAULT_GENRES.map(g => `<button class="genre-chip" data-genre="${g}">${capitalize(g)}</button>`).join('');
+
+  // Use event delegation so chips added later are handled automatically
+  container.onclick = e => {
+    const chip = e.target.closest('.genre-chip');
+    if (!chip || !onGenreSearch) return;
+    container.querySelectorAll('.genre-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    onGenreSearch(chip.dataset.genre);
+  };
+}
+
+// ── "Picked for tonight" ─────────────────────────────────────────────────────
 
 async function renderRecommendations() {
   const container = document.getElementById('recScroll');
@@ -35,22 +65,31 @@ async function renderRecommendations() {
     </div>`;
 
   try {
-    const history = getHistory();
+    // Build pool: saved genres (weighted by being explicit preferences)
+    // plus recent search history, deduplicated
+    const savedGenres = getSavedGenres().map(g => ({ term: g, type: 'genre' }));
+    const history     = getHistory();
+    const seen        = new Set(savedGenres.map(e => e.term.toLowerCase()));
+    const historyNew  = history.filter(h => !seen.has(h.term.toLowerCase()));
+    const pool        = [...savedGenres, ...historyNew];
+
     let artists = [];
     let sourceLabel = 'Based on your taste profile';
 
-    if (history.length > 0) {
-      const pick = pickRandom(history);
+    if (pool.length > 0) {
+      const pick = pickRandom(pool);
       const results = pick.type === 'artist'
         ? await searchByArtist(pick.term)
         : await searchByGenre(pick.term);
       artists = shuffle(results).slice(0, 3);
-      sourceLabel = `Because you searched "${pick.term}"`;
+      sourceLabel = pick.type === 'artist'
+        ? `Because you searched "${pick.term}"`
+        : `Featuring ${capitalize(pick.term)}`;
     } else {
-      const genre = pickRandom(DEFAULT_GENRES);
+      const genre   = pickRandom(DEFAULT_GENRES);
       const results = await searchByGenre(genre);
-      artists = shuffle(results).slice(0, 3);
-      sourceLabel = `Featuring ${genre}`;
+      artists       = shuffle(results).slice(0, 3);
+      sourceLabel   = `Featuring ${capitalize(genre)}`;
     }
 
     if (label) label.textContent = sourceLabel;
@@ -63,7 +102,7 @@ async function renderRecommendations() {
     container.innerHTML = artists.map(a => {
       const spotifyUrl = a.platforms?.spotify?.url ?? '';
       return `
-        <div class="rec-row" ${spotifyUrl ? `data-spotify-url="${spotifyUrl}"` : ''}>
+        <div class="rec-row">
           <div class="rec-avatar" style="background:${a.bg}">
             <i class="ti ${a.icon}" aria-hidden="true"></i>
           </div>
@@ -73,20 +112,20 @@ async function renderRecommendations() {
           </div>
           <div class="rec-row-right">
             <div class="rec-badge">${a.underground}% known</div>
-            ${spotifyUrl ? `<button class="rec-spotify-btn" data-spotify-url="${spotifyUrl}" aria-label="Open on Spotify"><i class="ti ti-brand-spotify"></i></button>` : ''}
+            ${spotifyUrl ? `<button class="rec-spotify-btn" data-url="${spotifyUrl}" aria-label="Open on Spotify"><i class="ti ti-brand-spotify"></i></button>` : ''}
           </div>
         </div>`;
     }).join('');
 
-    container.addEventListener('click', e => {
+    container.onclick = e => {
       const spotifyBtn = e.target.closest('.rec-spotify-btn');
       if (spotifyBtn) {
         e.stopPropagation();
-        window.open(spotifyBtn.dataset.spotifyUrl, '_blank', 'noopener');
+        window.open(spotifyBtn.dataset.url, '_blank', 'noopener');
         return;
       }
       if (e.target.closest('.rec-row')) switchScreen('discover');
-    });
+    };
 
   } catch (err) {
     console.error('[Home] Recs failed:', err);
@@ -94,13 +133,14 @@ async function renderRecommendations() {
   }
 }
 
+// ── Search wiring ─────────────────────────────────────────────────────────────
+
 function initSearch(onArtistSearch, onGenreSearch) {
   const tabs        = document.querySelectorAll('.search-tab');
   const paneArtist  = document.getElementById('pane-artist');
   const paneGenre   = document.getElementById('pane-genre');
   const artistInput = document.getElementById('input-artist');
   const genreInput  = document.getElementById('input-genre');
-  const genreChips  = document.querySelectorAll('.genre-chip');
   const artistIcon  = document.querySelector('#pane-artist .search-box i');
   const genreIcon   = document.querySelector('#pane-genre .search-box i');
 
@@ -132,19 +172,11 @@ function initSearch(onArtistSearch, onGenreSearch) {
     if (!g || !onGenreSearch) return;
     genreInput.blur();
     genreInput.value = '';
-    genreChips.forEach(c => c.classList.remove('active'));
+    document.getElementById('genreChips').querySelectorAll('.genre-chip').forEach(c => c.classList.remove('active'));
     await onGenreSearch(g);
   }
   genreInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') runGenreSearch(genreInput.value);
   });
   if (genreIcon) genreIcon.addEventListener('click', () => runGenreSearch(genreInput.value));
-
-  genreChips.forEach(chip => {
-    chip.addEventListener('click', () => {
-      genreChips.forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      runGenreSearch(chip.dataset.genre);
-    });
-  });
 }
