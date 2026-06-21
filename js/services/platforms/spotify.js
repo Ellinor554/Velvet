@@ -222,6 +222,27 @@ export async function findSimilarArtists(artistName) {
   }, SEARCH_TTL_MS);
 }
 
+export async function searchByGenre(genre) {
+  const key = `sp_genre:${genre.toLowerCase().trim()}`;
+  return cacheGet(key, async () => {
+    // Try structured genre filter first
+    const genreQuery = `genre:"${genre}"`;
+    const data   = await apiFetch(`/search?q=${encodeURIComponent(genreQuery)}&type=artist&limit=50`);
+    let simple   = data.artists?.items ?? [];
+
+    // Supplement with plain-text search if structured filter returns too few results
+    if (simple.length < 10) {
+      const fallback = await apiFetch(`/search?q=${encodeURIComponent(genre)}&type=artist&limit=50`);
+      const extra    = fallback.artists?.items ?? [];
+      const seen     = new Set(simple.map(a => a.id));
+      simple         = [...simple, ...extra.filter(a => !seen.has(a.id))];
+    }
+
+    const full = await enrichArtists(simple);
+    return full.filter(isUnderground).map(mapArtist);
+  }, SEARCH_TTL_MS);
+}
+
 export async function getArtist(id) {
   const spotifyId = id.replace(/^sp_/, '');
   const data      = await apiFetch(`/artists/${spotifyId}`);

@@ -24,7 +24,7 @@
  * @property {number} [limit] - Max results (default 20)
  */
 
-import { aggregate, getFeaturedFromAll, findSimilarArtists } from './platformAggregator.js';
+import { aggregate, getFeaturedFromAll, findSimilarArtists, searchByGenre as aggregateByGenre } from './platformAggregator.js';
 import { getState, setState } from '../core/store.js';
 import { get as cacheGet } from '../core/cache.js';
 import { toggleFavoriteArtist, isFavorite } from './storageService.js';
@@ -115,4 +115,9 @@ export function isSaved(artistId) {
 export async function searchByArtist(artistName) {
   if (!artistName.trim()) return [];
   return findSimilarArtists(artistName.trim());
+}
+
+export async function searchByGenre(genre) {
+  if (!genre.trim()) return [];
+  return aggregateByGenre(genre.trim());
 }

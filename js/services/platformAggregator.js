@@ -67,6 +67,15 @@ export async function getFeaturedFromAll() {
  * @param {string} artistName
  * @returns {Promise<import('./discoveryService.js').Artist[]>}
  */
+export async function searchByGenre(genre) {
+  const platforms = PLATFORMS.filter(p => typeof p.searchByGenre === 'function');
+  const settled   = await Promise.allSettled(platforms.map(p => p.searchByGenre(genre)));
+  const artists   = settled
+    .filter(r => r.status === 'fulfilled')
+    .flatMap(r => r.value);
+  return dedupe(artists);
+}
+
 export async function findSimilarArtists(artistName) {
   const withSimilar = PLATFORMS.filter(p => typeof p.findSimilarArtists === 'function');
   const withSearch  = PLATFORMS.filter(p => typeof p.findSimilarArtists !== 'function');

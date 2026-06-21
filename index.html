@@ -26,19 +26,34 @@
       <i class="ti ti-adjustments-horizontal" style="font-size:20px;color:var(--esp-muted);cursor:pointer" aria-hidden="true"></i>
     </div>
     <div class="search-wrap">
-      <div class="search-box">
-        <i class="ti ti-search" aria-hidden="true"></i>
-        <input class="search-input" placeholder="Type an artist you love..." />
+      <div class="search-tabs">
+        <button class="search-tab active" data-mode="artist">Sök via artist</button>
+        <button class="search-tab" data-mode="genre">Sök via genre</button>
       </div>
-    </div>
-    <div class="genre-label">Quick picks</div>
-    <div class="pills">
-      <div class="pill active">Indie Folk</div>
-      <div class="pill">Dark Synth</div>
-      <div class="pill">Underground Hip-Hop</div>
-      <div class="pill">Lo-fi Soul</div>
-      <div class="pill">Neo-Psychedelia</div>
-      <div class="pill">Ambient Post-Rock</div>
+
+      <div class="search-pane" id="pane-artist">
+        <div class="search-box">
+          <i class="ti ti-search" role="button" aria-label="Sök artist"></i>
+          <input class="search-input" id="input-artist" placeholder="Skriv ett artistnamn..." />
+        </div>
+      </div>
+
+      <div class="search-pane hidden" id="pane-genre">
+        <div class="search-box">
+          <i class="ti ti-tag" role="button" aria-label="Sök genre"></i>
+          <input class="search-input" id="input-genre" placeholder="Skriv ett genre..." />
+        </div>
+        <div class="genre-chips">
+          <span class="genre-chip" data-genre="post-punk">Post-punk</span>
+          <span class="genre-chip" data-genre="shoegaze">Shoegaze</span>
+          <span class="genre-chip" data-genre="dream pop">Dream Pop</span>
+          <span class="genre-chip" data-genre="darkwave">Darkwave</span>
+          <span class="genre-chip" data-genre="lo-fi">Lo-Fi</span>
+          <span class="genre-chip" data-genre="bedroom pop">Bedroom Pop</span>
+          <span class="genre-chip" data-genre="ambient">Ambient</span>
+          <span class="genre-chip" data-genre="indie folk">Indie Folk</span>
+        </div>
+      </div>
     </div>
     <div class="section-divider"></div>
     <div class="recs-label">

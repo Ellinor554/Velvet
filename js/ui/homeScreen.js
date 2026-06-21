@@ -2,12 +2,11 @@ import { getRecommendations } from '../services/discoveryService.js';
 import { switchScreen } from './nav.js';
 
 /**
- * @param {{ onSearch: (query: string) => void }} [options]
+ * @param {{ onSearch: (query: string) => void, onGenreSearch: (genre: string) => void }} [options]
  */
-export async function initHomeScreen({ onSearch } = {}) {
+export async function initHomeScreen({ onSearch, onGenreSearch } = {}) {
   await renderRecommendations();
-  initPills();
-  initSearch(onSearch);
+  initSearch(onSearch, onGenreSearch);
 }
 
 async function renderRecommendations() {
@@ -30,37 +29,57 @@ async function renderRecommendations() {
   });
 }
 
-function initPills() {
-  document.querySelectorAll('.pill').forEach(pill => {
-    pill.addEventListener('click', () => {
-      document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
-      pill.classList.add('active');
+function initSearch(onArtistSearch, onGenreSearch) {
+  const tabs        = document.querySelectorAll('.search-tab');
+  const paneArtist  = document.getElementById('pane-artist');
+  const paneGenre   = document.getElementById('pane-genre');
+  const artistInput = document.getElementById('input-artist');
+  const genreInput  = document.getElementById('input-genre');
+  const genreChips  = document.querySelectorAll('.genre-chip');
+  const artistIcon  = document.querySelector('#pane-artist .search-box i');
+  const genreIcon   = document.querySelector('#pane-genre .search-box i');
+
+  // Tab switching
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const mode = tab.dataset.mode;
+      paneArtist.classList.toggle('hidden', mode !== 'artist');
+      paneGenre.classList.toggle('hidden', mode !== 'genre');
     });
   });
-}
 
-function initSearch(onSearch) {
-  const input = document.querySelector('.search-input');
-  const icon  = document.querySelector('.search-box .ti-search');
-  if (!input || !onSearch) return;
-
-  async function runSearch() {
-    const query = input.value.trim();
-    if (!query) return;
-    input.blur();
-    input.value = '';
-    await onSearch(query);
+  // Artist search
+  async function runArtistSearch() {
+    const query = artistInput.value.trim();
+    if (!query || !onArtistSearch) return;
+    artistInput.blur();
+    artistInput.value = '';
+    await onArtistSearch(query);
   }
+  artistInput.addEventListener('keydown', e => { if (e.key === 'Enter') runArtistSearch(); });
+  if (artistIcon) artistIcon.addEventListener('click', runArtistSearch);
 
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') runSearch();
+  // Genre search
+  async function runGenreSearch(genre) {
+    const g = genre?.trim();
+    if (!g || !onGenreSearch) return;
+    genreInput.blur();
+    genreInput.value = '';
+    genreChips.forEach(c => c.classList.remove('active'));
+    await onGenreSearch(g);
+  }
+  genreInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') runGenreSearch(genreInput.value);
   });
+  if (genreIcon) genreIcon.addEventListener('click', () => runGenreSearch(genreInput.value));
 
-  if (icon) {
-    icon.style.cursor = 'pointer';
-    icon.removeAttribute('aria-hidden');
-    icon.setAttribute('role', 'button');
-    icon.setAttribute('aria-label', 'Search');
-    icon.addEventListener('click', runSearch);
-  }
+  genreChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      genreChips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      runGenreSearch(chip.dataset.genre);
+    });
+  });
 }
