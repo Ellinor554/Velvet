@@ -1,84 +1,35 @@
 /**
- * Spotify platform adapter — live Client Credentials implementation.
+ * Spotify platform adapter — proxied through Cloudflare Worker.
  *
- * IMPORTANT: The Spotify search endpoint returns simplified artist objects
- * (no popularity / genres / followers). Full details must be fetched via
- * GET /artists?ids=... before filtering or mapping. All internal helpers
- * that hit the search endpoint call enrichArtists() before returning.
+ * All Spotify auth (Client Credentials token exchange) now happens on the
+ * Worker. This module makes simple GET requests to the Worker and normalises
+ * the response into our internal Artist shape.
  *
- * Underground filter: popularity strictly < 30. Applied after enrichment.
+ * Worker contract:
+ *   GET {CLOUDFLARE_URL}?artist={name}  → { artists: SpotifyArtist[] }
+ *   GET {CLOUDFLARE_URL}?genre={genre}  → { artists: SpotifyArtist[] }
+ *
+ * The Worker applies the underground popularity filter before responding.
  */
 
-import { saveToCache, getFromCache, clearCache } from '../storageService.js';
-import { get as cacheGet }                       from '../../core/cache.js';
+import { get as cacheGet } from '../../core/cache.js';
 
-const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } = window.ENV ?? {};
+const WORKER_URL    = (window.ENV?.CLOUDFLARE_URL ?? '').replace(/\/$/, '');
+const FEED_TTL_MS   = 10 * 60 * 1000;
+const SEARCH_TTL_MS =  5 * 60 * 1000;
 
-const API      = 'https://api.spotify.com/v1';
-const ACCOUNTS = 'https://accounts.spotify.com';
-const TOKEN_KEY            = 'sp_token';
-const POPULARITY_CEILING   = 45;
+// ── Worker fetch ──────────────────────────────────────────────────────────────
 
-// ── Token management ─────────────────────────────────────────────────────────
-
-async function fetchFreshToken() {
-  const creds = btoa(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`);
-  const resp  = await fetch(`${ACCOUNTS}/api/token`, {
-    method: 'POST',
-    headers: {
-      Authorization:  `Basic ${creds}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials',
-  });
-  if (!resp.ok) throw new Error(`[Spotify] Token failed: ${resp.status}`);
-  const { access_token } = await resp.json();
-  saveToCache(TOKEN_KEY, access_token, 55);
-  return access_token;
+async function workerFetch(params) {
+  const url  = `${WORKER_URL}?${new URLSearchParams(params)}`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`[Worker] ${resp.status} — ${url}`);
+  const { artists = [] } = await resp.json();
+  return artists.map(normalise);
 }
 
-async function getToken() {
-  return getFromCache(TOKEN_KEY) ?? fetchFreshToken();
-}
-
-async function apiFetch(path) {
-  const doFetch = token =>
-    fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } });
-
-  let token = await getToken();
-  let resp  = await doFetch(token);
-
-  if (resp.status === 401) {
-    clearCache(TOKEN_KEY);
-    token = await fetchFreshToken();
-    resp  = await doFetch(token);
-  }
-
-  if (!resp.ok) throw new Error(`[Spotify] ${resp.status} — ${path}`);
-  return resp.json();
-}
-
-// ── Enrich simplified search results with full artist details ─────────────────
-// The search endpoint omits popularity, genres, and followers.
-// /artists?ids= returns full objects for up to 50 IDs at once.
-
-async function enrichArtists(simpleArtists) {
-  if (!simpleArtists.length) return [];
-  // filter(Boolean) removes any null/undefined IDs that would corrupt the ?ids= param
-  const ids = [...new Set(simpleArtists.map(a => a.id).filter(Boolean))].slice(0, 50);
-  if (!ids.length) return [];
-  const batches = [];
-  for (let i = 0; i < ids.length; i += 50) batches.push(ids.slice(i, i + 50));
-
-  const results = await Promise.allSettled(
-    batches.map(batch => apiFetch(`/artists?ids=${batch.join(',')}`))
-  );
-  return results
-    .filter(r => r.status === 'fulfilled')
-    .flatMap(r => r.value.artists ?? []);
-}
-
-// ── Data mapping ──────────────────────────────────────────────────────────────
+// ── Normalise to internal Artist shape ────────────────────────────────────────
+// Handles both Spotify full-artist objects and pre-mapped Worker responses.
 
 const GENRE_ICONS = new Map([
   ['hip-hop',    'ti-writing'],   ['rap',        'ti-writing'],
@@ -98,13 +49,17 @@ const BG_PALETTE = [
 
 const fmt = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 
-function mapArtist(a) {
-  const genres = a.genres ?? [];
-  const icon   = [...GENRE_ICONS.entries()]
+function normalise(a) {
+  // Already in internal format (Worker pre-mapped the response)
+  if (a.underground !== undefined && typeof a.icon === 'string') return a;
+
+  // Map from Spotify full-artist format
+  const genres    = a.genres ?? [];
+  const icon      = [...GENRE_ICONS.entries()]
     .find(([key]) => genres.some(g => g.includes(key)))?.[1] ?? 'ti-music';
-  const bg         = BG_PALETTE[parseInt(a.id.slice(-2), 16) % BG_PALETTE.length];
-  const followers  = fmt.format(a.followers?.total ?? 0);
-  const genreStr   = genres.length ? ` Sound: ${genres.slice(0, 3).join(', ')}.` : '';
+  const bg        = BG_PALETTE[parseInt((a.id ?? '00').slice(-2), 16) % BG_PALETTE.length];
+  const followers = fmt.format(a.followers?.total ?? 0);
+  const genreStr  = genres.length ? ` Sound: ${genres.slice(0, 3).join(', ')}.` : '';
 
   return {
     id:          `sp_${a.id}`,
@@ -122,132 +77,40 @@ function mapArtist(a) {
   };
 }
 
-function isUnderground(a) {
-  return typeof a.popularity === 'number' &&
-         a.popularity < POPULARITY_CEILING &&
-         (a.followers?.total ?? 0) > 50;
-}
-
 // ── Platform adapter interface ─────────────────────────────────────────────────
 
-const FEED_QUERIES = [
-  'bedroom pop', 'lo-fi indie', 'underground hip hop',
-  'post-punk revival', 'dark ambient',
+const FEED_GENRES = [
+  'bedroom pop', 'lo-fi indie', 'underground hip hop', 'dark ambient',
 ];
-
-const FEED_TTL_MS   = 10 * 60 * 1000;
-const SEARCH_TTL_MS =  5 * 60 * 1000;
 
 export async function getFeatured() {
   return cacheGet('sp_featured', async () => {
-    // Step 1: search each genre query for artist IDs
     const settled = await Promise.allSettled(
-      FEED_QUERIES.map(q =>
-        apiFetch(`/search?q=${encodeURIComponent(q)}&type=artist&limit=20`)
-      )
+      FEED_GENRES.map(g => workerFetch({ genre: g }))
     );
-    const simple = settled
-      .filter(r => r.status === 'fulfilled')
-      .flatMap(r => r.value.artists?.items ?? []);
-
-    // Step 2: enrich with full details (popularity, genres, followers)
-    const full = await enrichArtists(simple);
-
-    // Step 3: filter underground and deduplicate
     const seen = new Set();
-    return full
-      .filter(a => isUnderground(a) && !seen.has(a.id) && seen.add(a.id))
-      .map(mapArtist);
+    return settled
+      .filter(r => r.status === 'fulfilled')
+      .flatMap(r => r.value)
+      .filter(a => !seen.has(a.id) && seen.add(a.id));
   }, FEED_TTL_MS);
 }
 
 export async function search(query) {
   const key = `sp_search:${query.toLowerCase().trim()}`;
-  return cacheGet(key, async () => {
-    const data   = await apiFetch(`/search?q=${encodeURIComponent(query)}&type=artist&limit=50`);
-    const simple = data.artists?.items ?? [];
-    const full   = await enrichArtists(simple);
-    return full.filter(isUnderground).map(mapArtist);
-  }, SEARCH_TTL_MS);
+  return cacheGet(key, () => workerFetch({ artist: query }), SEARCH_TTL_MS);
 }
 
-/**
- * Given an artist name the user typed, find underground artists with a
- * similar sound by using the seed artist's genres as a search pivot.
- *
- * @param {string} artistName
- * @returns {Promise<import('../discoveryService.js').Artist[]>}
- */
 export async function findSimilarArtists(artistName) {
   const key = `sp_similar:${artistName.toLowerCase().trim()}`;
-  return cacheGet(key, async () => {
-    // 1. Find the seed artist (can be mainstream — we just need their genres)
-    const seedSearch = await apiFetch(
-      `/search?q=${encodeURIComponent(artistName)}&type=artist&limit=1`
-    );
-    const seedSimple = seedSearch.artists?.items?.[0];
-    if (!seedSimple) return [];
-
-    // 2. Enrich to get all genres
-    const [seed] = await enrichArtists([seedSimple]);
-    const genres  = seed?.genres ?? [];
-    console.log('[Spotify] seed artist:', seedSimple.name, '| genres:', genres);
-
-    // 3. Run genre searches sequentially — filter out blank genre strings
-    //    before building queries so we never send q= (empty) to Spotify.
-    const validGenres = genres.filter(g => g?.trim());
-    const queries     = validGenres.length ? validGenres.slice(0, 2) : [artistName];
-    console.log('[Spotify] seed:', seedSimple.name, '| querying:', queries);
-
-    const simple = [];
-    for (const q of queries) {
-      if (!q?.trim()) continue;
-      try {
-        const data = await apiFetch(`/search?q=${encodeURIComponent(q)}&type=artist&limit=20`);
-        const items = (data.artists?.items ?? []).filter(a => a.id !== seedSimple.id);
-        simple.push(...items);
-      } catch (e) {
-        console.warn('[Spotify] genre search failed for', q, e.message);
-      }
-    }
-    console.log('[Spotify] raw results:', simple.length);
-
-    // 4. Deduplicate by ID before enriching
-    const seen   = new Set();
-    const unique = simple.filter(a => !seen.has(a.id) && seen.add(a.id));
-
-    // 5. Enrich with full details and apply underground filter
-    const full = await enrichArtists(unique);
-    console.log('[Spotify] enriched:', full.length, '| sample popularities:', full.slice(0, 5).map(a => `${a.name}:${a.popularity}`));
-    const result = full.filter(isUnderground);
-    console.log('[Spotify] underground (< ' + POPULARITY_CEILING + '):', result.length);
-    return result.map(mapArtist);
-  }, SEARCH_TTL_MS);
+  return cacheGet(key, () => workerFetch({ artist: artistName }), SEARCH_TTL_MS);
 }
 
 export async function searchByGenre(genre) {
   const key = `sp_genre:${genre.toLowerCase().trim()}`;
-  return cacheGet(key, async () => {
-    // Try structured genre filter first
-    const genreQuery = `genre:"${genre}"`;
-    const data   = await apiFetch(`/search?q=${encodeURIComponent(genreQuery)}&type=artist&limit=50`);
-    let simple   = data.artists?.items ?? [];
-
-    // Supplement with plain-text search if structured filter returns too few results
-    if (simple.length < 10) {
-      const fallback = await apiFetch(`/search?q=${encodeURIComponent(genre)}&type=artist&limit=50`);
-      const extra    = fallback.artists?.items ?? [];
-      const seen     = new Set(simple.map(a => a.id));
-      simple         = [...simple, ...extra.filter(a => !seen.has(a.id))];
-    }
-
-    const full = await enrichArtists(simple);
-    return full.filter(isUnderground).map(mapArtist);
-  }, SEARCH_TTL_MS);
+  return cacheGet(key, () => workerFetch({ genre }), SEARCH_TTL_MS);
 }
 
 export async function getArtist(id) {
-  const spotifyId = id.replace(/^sp_/, '');
-  const data      = await apiFetch(`/artists/${spotifyId}`);
-  return isUnderground(data) ? mapArtist(data) : null;
+  return null;
 }
