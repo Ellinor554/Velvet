@@ -1,92 +1,9 @@
 import { getFeed, saveArtist } from '../services/discoveryService.js';
-import { WORKER_URL }          from '../services/platforms/spotify.js';
 import { showToast }            from './toast.js';
 
 /** @type {import('../services/discoveryService.js').Artist[]} */
 let feed       = [];
 let currentIdx = 0;
-
-// ── Audio state ───────────────────────────────────────────────────────────────
-let audio      = null;   // current HTMLAudioElement
-let playingId  = null;   // Spotify artist ID currently playing/paused
-
-function stopCurrentAudio() {
-  if (audio) {
-    audio.pause();
-    audio = null;
-  }
-  playingId = null;
-  document.querySelectorAll('.btn-preview').forEach(resetBtn);
-}
-
-function resetBtn(btn) {
-  btn.classList.remove('playing', 'loading');
-  btn.querySelector('.preview-icon').className = 'ti ti-player-play preview-icon';
-  btn.querySelector('.preview-label').textContent = 'Preview';
-}
-
-async function handlePreview(btn, artistId) {
-  if (!artistId) { showToast('No preview available'); return; }
-
-  // Same artist — toggle pause / resume
-  if (playingId === artistId && audio) {
-    if (audio.paused) {
-      audio.play();
-      btn.classList.add('playing');
-      btn.querySelector('.preview-icon').className = 'ti ti-player-pause preview-icon';
-      btn.querySelector('.preview-label').textContent = 'Playing';
-    } else {
-      audio.pause();
-      btn.classList.remove('playing');
-      btn.querySelector('.preview-icon').className = 'ti ti-player-play preview-icon';
-      btn.querySelector('.preview-label').textContent = 'Preview';
-    }
-    return;
-  }
-
-  // New artist — stop whatever was playing
-  stopCurrentAudio();
-  playingId = artistId;
-
-  // Loading state
-  btn.classList.add('loading');
-  btn.querySelector('.preview-icon').className = 'ti ti-loader-2 preview-icon';
-  btn.querySelector('.preview-label').textContent = 'Loading…';
-
-  try {
-    const resp = await fetch(`${WORKER_URL}?tracks_for_artist_id=${artistId}`);
-    if (!resp.ok) throw new Error('Worker error');
-    const { tracks = [] } = await resp.json();
-    const track = tracks.find(t => t.preview_url);
-
-    if (!track) {
-      showToast('No preview available for this artist');
-      resetBtn(btn);
-      playingId = null;
-      return;
-    }
-
-    audio = new Audio(track.preview_url);
-    audio.volume = 0.8;
-    await audio.play();
-
-    btn.classList.remove('loading');
-    btn.classList.add('playing');
-    btn.querySelector('.preview-icon').className = 'ti ti-player-pause preview-icon';
-    btn.querySelector('.preview-label').textContent = 'Playing';
-
-    audio.addEventListener('ended', () => {
-      resetBtn(btn);
-      audio     = null;
-      playingId = null;
-    });
-
-  } catch {
-    showToast('Preview unavailable');
-    resetBtn(btn);
-    playingId = null;
-  }
-}
 
 // ── Card rendering ────────────────────────────────────────────────────────────
 
@@ -104,9 +21,10 @@ export async function initDiscoverScreen() {
 
   // Event delegation — survives card re-renders
   document.getElementById('artistCard').addEventListener('click', e => {
-    const btn = e.target.closest('.btn-preview');
+    const btn = e.target.closest('.btn-spotify-open');
     if (!btn) return;
-    handlePreview(btn, btn.dataset.artistId);
+    const url = btn.dataset.spotifyUrl;
+    if (url) window.open(url, '_blank', 'noopener');
   });
 
   renderCard();
@@ -131,10 +49,8 @@ function renderCard() {
   hint.style.display    = 'block';
   btns.forEach(b => b.style.opacity = '1');
 
-  const a          = feed[currentIdx];
-  const spotifyId  = a.platforms?.spotify?.id ?? '';
-  const isPlaying  = playingId === spotifyId && audio && !audio.paused;
-  const isLoading  = playingId === spotifyId && btn => btn?.classList.contains('loading');
+  const a           = feed[currentIdx];
+  const spotifyUrl  = a.platforms?.spotify?.url ?? '';
 
   card.innerHTML = `
     <div class="card-image" style="background:${a.bg}">
@@ -155,10 +71,9 @@ function renderCard() {
       <div class="card-genre">${a.genre}</div>
       <div class="card-bio">${a.bio}</div>
       <div class="card-tags">${a.tags.map(t => `<span class="card-tag">${t}</span>`).join('')}</div>
-      ${spotifyId ? `
-      <button class="btn-preview ${isPlaying ? 'playing' : ''}" data-artist-id="${spotifyId}" aria-label="Play preview">
-        <i class="ti ${isPlaying ? 'ti-player-pause' : 'ti-player-play'} preview-icon"></i>
-        <span class="preview-label">${isPlaying ? 'Playing' : 'Preview'}</span>
+      ${spotifyUrl ? `
+      <button class="btn-spotify btn-spotify-open" data-spotify-url="${spotifyUrl}" aria-label="Open on Spotify">
+        <i class="ti ti-brand-spotify"></i> Open on Spotify
       </button>` : ''}
     </div>
   `;
@@ -171,7 +86,6 @@ function renderCard() {
 
 function skipArtist() {
   if (currentIdx >= feed.length) return;
-  stopCurrentAudio();
   animateCard('left');
   setTimeout(() => { currentIdx++; renderCard(); }, 220);
 }
@@ -181,7 +95,6 @@ function heartArtist() {
   const artist = feed[currentIdx];
   const nowSaved = saveArtist(artist);
   showToast(nowSaved ? `Saved "${artist.name}"` : `Removed "${artist.name}"`);
-  stopCurrentAudio();
   animateCard('right');
   setTimeout(() => { currentIdx++; renderCard(); }, 220);
 }
@@ -206,7 +119,6 @@ function resetDeck() {
 }
 
 export function loadArtists(artists) {
-  stopCurrentAudio();
   feed       = artists;
   currentIdx = 0;
   renderCard();
@@ -217,7 +129,6 @@ export function setLoading(on) {
   const hint = document.getElementById('actionHint');
   const btns = document.querySelectorAll('.action-row button');
   if (on) {
-    stopCurrentAudio();
     card.style.display = 'block';
     card.innerHTML = `
       <div style="height:300px;display:flex;align-items:center;justify-content:center;
