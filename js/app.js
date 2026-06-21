@@ -12,11 +12,11 @@ async function runSearch(label, fetcher) {
   setLoading(true);
   try {
     const artists = await fetcher();
-    if (!artists.length) showToast(`Inga underjordiska artister hittades för "${label}"`);
+    if (!artists.length) showToast(`No underground artists found for "${label}"`);
     loadArtists(artists);
   } catch (err) {
     console.error('[App] Search failed:', err);
-    showToast('Kunde inte nå Spotify — kontrollera din anslutning');
+    showToast('Could not reach Spotify — check your connection');
     setLoading(false);
   }
 }
