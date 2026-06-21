@@ -14,7 +14,7 @@
 
 import { get as cacheGet } from '../../core/cache.js';
 
-const WORKER_URL    = (window.ENV?.CLOUDFLARE_URL ?? '').replace(/\/$/, '');
+const WORKER_URL    = 'https://winter-hall-da95.tano-ellinor.workers.dev';
 const FEED_TTL_MS   = 10 * 60 * 1000;
 const SEARCH_TTL_MS =  5 * 60 * 1000;
 
