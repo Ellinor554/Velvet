@@ -41,14 +41,26 @@ function initPills() {
 
 function initSearch(onSearch) {
   const input = document.querySelector('.search-input');
+  const icon  = document.querySelector('.search-box .ti-search');
   if (!input || !onSearch) return;
 
-  input.addEventListener('keydown', async e => {
-    if (e.key !== 'Enter') return;
+  async function runSearch() {
     const query = input.value.trim();
     if (!query) return;
     input.blur();
     input.value = '';
     await onSearch(query);
+  }
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') runSearch();
   });
+
+  if (icon) {
+    icon.style.cursor = 'pointer';
+    icon.removeAttribute('aria-hidden');
+    icon.setAttribute('role', 'button');
+    icon.setAttribute('aria-label', 'Search');
+    icon.addEventListener('click', runSearch);
+  }
 }
