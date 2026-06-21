@@ -184,29 +184,34 @@ export async function findSimilarArtists(artistName) {
     const seedSimple = seedSearch.artists?.items?.[0];
     if (!seedSimple) return [];
 
-    // 2. Enrich to get genres
+    // 2. Enrich to get all genres
     const [seed] = await enrichArtists([seedSimple]);
     const genres  = seed?.genres ?? [];
 
-    // 3. Build a genre-based query to find similar underground artists
-    // Use only the primary genre to avoid Spotify rejecting multi-genre filters
-    const primaryGenre = genres[0];
-    const query = primaryGenre ? `genre:"${primaryGenre}"` : artistName;
+    // 3. Run one search per genre keyword (plain text, not genre: filter).
+    //    This works for every genre and surfaces far more underground artists
+    //    than the unreliable genre:"..." filter syntax.
+    //    Fall back to the artist name itself if no genres are known.
+    const queries = genres.length ? genres.slice(0, 3) : [artistName];
 
-    const data   = await apiFetch(`/search?q=${encodeURIComponent(query)}&type=artist&limit=50`);
-    const simple = (data.artists?.items ?? []).filter(a => a.id !== seedSimple.id);
-    const full   = await enrichArtists(simple);
-    const underground = full.filter(isUnderground);
+    const settled = await Promise.allSettled(
+      queries.map(q =>
+        apiFetch(`/search?q=${encodeURIComponent(q)}&type=artist&limit=50`)
+      )
+    );
 
-    // Fallback: if genre pivot gives nothing, search directly by artist name
-    if (underground.length === 0) {
-      const fallbackData   = await apiFetch(`/search?q=${encodeURIComponent(artistName)}&type=artist&limit=50`);
-      const fallbackSimple = (fallbackData.artists?.items ?? []).filter(a => a.id !== seedSimple.id);
-      const fallbackFull   = await enrichArtists(fallbackSimple);
-      return fallbackFull.filter(isUnderground).map(mapArtist);
-    }
+    const simple = settled
+      .filter(r => r.status === 'fulfilled')
+      .flatMap(r => r.value.artists?.items ?? [])
+      .filter(a => a.id !== seedSimple.id);
 
-    return underground.map(mapArtist);
+    // 4. Deduplicate by ID before enriching to avoid wasted API calls
+    const seen   = new Set();
+    const unique = simple.filter(a => !seen.has(a.id) && seen.add(a.id));
+
+    // 5. Enrich with full details and apply underground filter
+    const full = await enrichArtists(unique);
+    return full.filter(isUnderground).map(mapArtist);
   }, SEARCH_TTL_MS);
 }
 
