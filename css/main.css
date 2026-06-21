@@ -138,6 +138,14 @@ body { display: flex; justify-content: center; align-items: flex-start; font-fam
 .nav-btn span { font-size: 10px; letter-spacing: 0.05em; }
 .nav-btn.active { color: var(--esp-cream); }
 
+/* ── Preview button ── */
+.btn-preview { display: flex; align-items: center; gap: 7px; margin-top: 14px; background: var(--esp-surface); border: 1px solid var(--esp-border); color: var(--esp-muted); border-radius: 20px; padding: 8px 16px; font-size: 13px; cursor: pointer; font-family: var(--sans); transition: all 0.18s; }
+.btn-preview:hover { color: var(--esp-cream); border-color: var(--esp-accent-dim); }
+.btn-preview.playing { color: var(--esp-cream); border-color: var(--esp-accent-dim); background: var(--esp-pill-active); }
+.btn-preview .preview-icon { font-size: 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.btn-preview.loading .preview-icon { animation: spin 0.7s linear infinite; }
+
 /* ── Toast ── */
 .toast { position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%); background: var(--esp-surface); border: 1px solid var(--esp-border); color: var(--esp-cream); padding: 8px 18px; border-radius: 20px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; z-index: 100; }
 .toast.show { opacity: 1; }
