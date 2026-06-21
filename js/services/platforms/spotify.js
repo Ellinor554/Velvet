@@ -64,14 +64,17 @@ async function apiFetch(path) {
 
 async function enrichArtists(simpleArtists) {
   if (!simpleArtists.length) return [];
-  const ids     = [...new Set(simpleArtists.map(a => a.id))];
+  // Cap at 50 to keep to a single API call and avoid timeouts
+  const ids = [...new Set(simpleArtists.map(a => a.id))].slice(0, 50);
   const batches = [];
   for (let i = 0; i < ids.length; i += 50) batches.push(ids.slice(i, i + 50));
 
-  const results = await Promise.all(
+  const results = await Promise.allSettled(
     batches.map(batch => apiFetch(`/artists?ids=${batch.join(',')}`))
   );
-  return results.flatMap(r => r.artists ?? []);
+  return results
+    .filter(r => r.status === 'fulfilled')
+    .flatMap(r => r.value.artists ?? []);
 }
 
 // ── Data mapping ──────────────────────────────────────────────────────────────
@@ -187,31 +190,35 @@ export async function findSimilarArtists(artistName) {
     // 2. Enrich to get all genres
     const [seed] = await enrichArtists([seedSimple]);
     const genres  = seed?.genres ?? [];
+    console.log('[Spotify] seed artist:', seedSimple.name, '| genres:', genres);
 
-    // 3. Run one search per genre keyword (plain text, not genre: filter).
-    //    This works for every genre and surfaces far more underground artists
-    //    than the unreliable genre:"..." filter syntax.
-    //    Fall back to the artist name itself if no genres are known.
-    const queries = genres.length ? genres.slice(0, 3) : [artistName];
+    // 3. Run genre searches sequentially to avoid overwhelming Spotify with
+    //    concurrent requests (which causes 408 timeouts).
+    const queries = genres.length ? genres.slice(0, 2) : [artistName];
+    console.log('[Spotify] seed:', seedSimple.name, '| genres:', genres, '| querying:', queries);
 
-    const settled = await Promise.allSettled(
-      queries.map(q =>
-        apiFetch(`/search?q=${encodeURIComponent(q)}&type=artist&limit=50`)
-      )
-    );
+    const simple = [];
+    for (const q of queries) {
+      try {
+        const data = await apiFetch(`/search?q=${encodeURIComponent(q)}&type=artist&limit=20`);
+        const items = (data.artists?.items ?? []).filter(a => a.id !== seedSimple.id);
+        simple.push(...items);
+      } catch (e) {
+        console.warn('[Spotify] genre search failed for', q, e.message);
+      }
+    }
+    console.log('[Spotify] raw results:', simple.length);
 
-    const simple = settled
-      .filter(r => r.status === 'fulfilled')
-      .flatMap(r => r.value.artists?.items ?? [])
-      .filter(a => a.id !== seedSimple.id);
-
-    // 4. Deduplicate by ID before enriching to avoid wasted API calls
+    // 4. Deduplicate by ID before enriching
     const seen   = new Set();
     const unique = simple.filter(a => !seen.has(a.id) && seen.add(a.id));
 
     // 5. Enrich with full details and apply underground filter
     const full = await enrichArtists(unique);
-    return full.filter(isUnderground).map(mapArtist);
+    console.log('[Spotify] enriched:', full.length, '| sample popularities:', full.slice(0, 5).map(a => `${a.name}:${a.popularity}`));
+    const result = full.filter(isUnderground);
+    console.log('[Spotify] underground (< ' + POPULARITY_CEILING + '):', result.length);
+    return result.map(mapArtist);
   }, SEARCH_TTL_MS);
 }
 
